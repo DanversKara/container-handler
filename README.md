@@ -62,6 +62,34 @@ pass extra switches or local files to Brave.
 Not carried over from the Firefox add-on: creating containers with a colour/icon,
 `pinned`, and reader mode — Brave's switch doesn't support them.
 
+## Opening from the address bar
+
+Brave has no "always open this site in container X" setting like Firefox
+Multi-Account Containers, so typing `claude.ai` and pressing Enter opens it outside
+any container. Instead, make the address bar offer your container link.
+
+**Bookmarks (most reliable).** Bookmark each site using its `ext+container://` URL
+and the name you'd type:
+
+| Name | URL |
+|---|---|
+| `Claude` | `ext+container://GOOGLE/https://claude.ai/new` |
+| `Gemini` | `ext+container://GOOGLE/https://gemini.google.com/app` |
+| `DeepSeek` | `ext+container://GOOGLE/https://chat.deepseek.com/sign_in` |
+
+Type "claude", press **↓** to select the bookmark suggestion, then **Enter**. The one
+habit to learn is to pick the bookmark rather than the top "claude.ai" suggestion.
+
+**Site search shortcut (untested).** In `brave://settings/searchEngines` →
+**Site search** → **Add**:
+
+- Name: `Claude`
+- Shortcut: `claude`
+- URL: `ext+container://GOOGLE/https://claude.ai/new`
+
+Then type `claude` and press **Enter** (or **Tab**, then **Enter**). If Brave won't
+save a non-web URL here, or nothing happens, use bookmarks instead.
+
 ## Using Brave Beta or Nightly
 
 Set `BRAVE_BIN` (Linux/macOS) or `$BraveExe` (Windows) at the top of the handler
