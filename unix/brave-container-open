@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Open a URL in a Brave container.
+#
+# Accepts:
+#   ext+container://GOOGLE/https://claude.ai/new           (path form)
+#   ext+container:name=GOOGLE&url=https%3A%2F%2Fclaude.ai   (Firefox add-on form)
+#   brave-container-open GOOGLE https://claude.ai/new       (launcher form)
+#
+# Special container names:
+#   @temp        -> a new temporary container
+#   @temp:Name   -> the temporary container called "Name" (reused if it exists)
+# In the Firefox form, add &temporary=true for a temporary container.
+#
+# Requires Brave 1.95+ (adds the --container / --temporary-container switches)
+# and Containers turned on in brave://settings/braveContent.
+
+set -euo pipefail
+
+# Set this to override Brave detection, e.g. for Beta/Nightly builds.
+BRAVE_BIN="${BRAVE_BIN:-}"
+
+die() {
+  echo "brave-container-open: $*" >&2
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "Brave container link" "$*" || true
+  elif command -v osascript >/dev/null 2>&1; then
+    osascript -e "display notification \"${*//\"/\\\"}\" with title \"Brave container link\"" || true
+  fi
+  exit 1
+}
+
+urldecode() {
+  local s="${1//+/ }"
+  printf '%b' "${s//%/\\x}"
+}
+
+name="" url="" temporary=0
+
+if [[ $# -ge 2 ]]; then
+  name="$1"; url="$2"
+elif [[ $# -eq 1 ]]; then
+  link="$1"
+  [[ "$link" =~ ^ext\+container: ]] || die "Not an ext+container link: $link"
+  rest="${link#ext+container:}"
+  if [[ "$rest" == //* ]]; then
+    # Path form: //NAME/URL
+    rest="${rest#//}"
+    [[ "$rest" == */* ]] || die "Missing URL in: $link"
+    name="$(urldecode "${rest%%/*}")"
+    url="${rest#*/}"
+  else
+    # Firefox add-on form: name=...&url=...&temporary=true
+    IFS='&' read -r -a params <<< "$rest"
+    for p in "${params[@]}"; do
+      key="${p%%=*}"; val="${p#*=}"
+      case "$key" in
+        name) name="$(urldecode "$val")" ;;
+        url) url="$(urldecode "$val")" ;;
+        temporary) [[ "$val" == "true" ]] && temporary=1 ;;
+      esac
+    done
+  fi
+else
+  die "Usage: brave-container-open 'ext+container://NAME/URL'  or  brave-container-open NAME URL"
+fi
+
+# Some handlers collapse "https://" to "https:/" in the path; repair it.
+if [[ "$url" =~ ^(https?):/([^/].*)$ ]]; then
+  url="${BASH_REMATCH[1]}://${BASH_REMATCH[2]}"
+fi
+
+# Only web URLs: keeps links from smuggling switches or local files into Brave.
+[[ "$url" =~ ^https?://[^[:space:]]+$ ]] || die "Only http(s) URLs are allowed, got: $url"
+[[ -n "$name" ]] || die "Missing container name"
+
+if [[ "$name" == "@temp" ]]; then
+  temporary=1; name=""
+elif [[ "$name" == @temp:* ]]; then
+  temporary=1; name="${name#@temp:}"
+fi
+
+args=()
+(( temporary )) && args+=("--temporary-container")
+[[ -n "$name" ]] && args+=("--container=$name")
+
+if [[ -z "$BRAVE_BIN" ]]; then
+  for c in \
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
+    "$HOME/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
+    brave-browser brave brave-browser-stable; do
+    if [[ "$c" == /* && -x "$c" ]] || command -v "$c" >/dev/null 2>&1; then
+      BRAVE_BIN="$c"; break
+    fi
+  done
+fi
+
+if [[ -n "$BRAVE_BIN" ]]; then
+  # "--" ends switch parsing, so the URL can never be read as a switch.
+  nohup "$BRAVE_BIN" ${args[@]+"${args[@]}"} -- "$url" >/dev/null 2>&1 &
+elif command -v flatpak >/dev/null 2>&1 && flatpak info com.brave.Browser >/dev/null 2>&1; then
+  nohup flatpak run com.brave.Browser ${args[@]+"${args[@]}"} -- "$url" >/dev/null 2>&1 &
+else
+  die "Couldn't find Brave. Set BRAVE_BIN at the top of this script."
+fi
